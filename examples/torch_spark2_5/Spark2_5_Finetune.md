@@ -316,11 +316,6 @@ LLaMA-Factory ships a Gradio WebUI (`llamafactory-cli webui`) for browser-based 
 ### 5.1 Launch the WebUI
 
 ```bash
-export DISABLE_VERSION_CHECK=1
-export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false
-export GRADIO_SERVER_NAME=0.0.0.0
-export GRADIO_SERVER_PORT=7860
-
 llamafactory-cli webui
 # terminal prints: Visit http://ip:port for Web UI, e.g., http://127.0.0.1:7860
 ```
@@ -331,40 +326,40 @@ Open `http://<host>:7860` in a browser.
 
 The WebUI builds the arg dict in `_parse_train_args` (`src/llamafactory/webui/runner.py:133-298`) and spawns `llamafactory-cli train <cmd.yaml>` as a subprocess.
 
-1. **Model name**: a custom name (e.g. `spark_1p7b`, `spark_4b`) used to organize `saves/<name>/<finetuning_type>/`.
+1. **Model name**: a custom name used to organize `saves/<name>/<finetuning_type>/`.
 2. **Model path**: absolute path to the model directory.
 3. **Finetuning method**: `full` (Muon does not support lora/freeze).
 4. **Training stage**: `Supervised Fine-Tuning`.
-5. **Template**: `deepseek3`.
-6. **Dataset**: tick the registered dataset (e.g. `spark_sft`).
+5. **Template**: `spark`.
+6. **Dataset**: tick the registered dataset(openai format).
 7. Fill the **Train** tab according to CLI . 
 8. **Preview command**: click "Preview" to inspect the generated command, then "Start".
 
 #### 5.2.1 Additional arguments (inject Muon & gradient checkpointing)
 
-The WebUI form doesn't expose `use_muon`, `warmup_ratio`, `gradient_checkpointing`, `save_only_model`. Put them in the Train tab's "Additional arguments" box as JSON; it is merged via `args.update(json.loads(extra_args))` (`runner.py:187`), overriding form values.
+The WebUI form doesn't expose `use_muon`, `gradient_checkpointing`, `save_only_model`. Put them in the Train tab's "Additional arguments" box as JSON; it is merged via `args.update(json.loads(extra_args))` (`runner.py:187`), overriding form values.
 
-**1.7B**:
+**1.7B**(Do **not** set `trust_remote_code: true`, otherwise it will fail to perform recognition):
 
 ```json
-{"use_muon": true, "warmup_ratio": 0, "save_only_model": false, "overwrite_cache": true, "dataloader_num_workers": 4, "ddp_timeout": 180000000}
+{"use_muon": true,  "weight_decay": 0.1,"adam_beta1":0.9,"adam_beta2":0.95,"adam_epsilon":1.0e-8,, "save_only_model": false, "overwrite_cache": true, "dataloader_num_workers": 4, "ddp_timeout": 180000000}
 ```
 
-**4B** (add `gradient_checkpointing`):
+**4B** (add `gradient_checkpointing`,If you encounter insufficient VRAM and are using ZeRO sharding or fsdp, disable `use_muon` to avoid compatibility issues):
 
 ```json
-{"use_muon": true, "warmup_ratio": 0, "save_only_model": false, "overwrite_cache": true, "dataloader_num_workers": 4, "ddp_timeout": 180000000, "gradient_checkpointing": true}
+{"use_muon": true,  "weight_decay": 0.1,"adam_beta1":0.9,"adam_beta2":0.95,"adam_epsilon":1.0e-8,, "save_only_model": false, "overwrite_cache": true, "dataloader_num_workers": 4, "ddp_timeout": 180000000, "gradient_checkpointing": true}
 ```
 ### 5.3 LoRA SFT via WebUI
 
 LoRA SFT mirrors Full SFT but switches the finetuning method to `lora` and exposes LoRA-specific parameters. The optimizer stays default AdamW — **do not** inject `use_muon`.
 
-1. **Model name**: a custom name (e.g. `spark_1p7b_lora`, `spark_4b_lora`) used to organize `saves/<name>/lora/`.
+1. **Model name**: a custom name used to organize `saves/<name>/lora/`.
 2. **Model path**: absolute path to the model directory.
 3. **Finetuning method**: `lora`.
 4. **Training stage**: `Supervised Fine-Tuning`.
 5. **Template**: `spark`.
-6. **Dataset**: tick the registered dataset (e.g. `spark_sft`).
+6. **Dataset**: tick the registered dataset (openai format).
 7. **LoRA tab**: set `lora_rank` (8 / 16 / 32), `lora_alpha` (default = rank × 2), `lora_dropout` (0.05), `lora_target` (`all` or comma-separated layer names such as `q_k_v_proj,g_proj,out_proj,gate_proj,up_proj,down_proj`).
 8. Fill the **Train** tab per the CLI configs in section 3; LoRA is memory-light, so a single GPU is usually enough.
 9. **Preview command**: click "Preview" to inspect the generated command, then "Start".
@@ -376,13 +371,13 @@ LoRA must NOT enable `use_muon`. For 4B, add `gradient_checkpointing` to cut act
 **1.7B**:
 
 ```json
-{"warmup_ratio": 0, "overwrite_cache": true, "dataloader_num_workers": 4, "ddp_timeout": 180000000}
+{"use_muon": false,  "weight_decay": 0.1,"adam_beta1":0.9,"adam_beta2":0.95,"adam_epsilon":1.0e-8,, "save_only_model": false, "overwrite_cache": true, "dataloader_num_workers": 4, "ddp_timeout": 180000000}
 ```
 
 **4B** (add `gradient_checkpointing`):
 
 ```json
-{"warmup_ratio": 0, "overwrite_cache": true, "dataloader_num_workers": 4, "ddp_timeout": 180000000, "gradient_checkpointing": true}
+{"use_muon": false,  "weight_decay": 0.1,"adam_beta1":0.9,"adam_beta2":0.95,"adam_epsilon":1.0e-8,, "save_only_model": false, "overwrite_cache": true, "dataloader_num_workers": 4, "ddp_timeout": 180000000, "gradient_checkpointing": true}
 ```
 
 This parallels the CLI LoRA configs in section 3.
@@ -390,7 +385,7 @@ This parallels the CLI LoRA configs in section 3.
 
 ### 5.4 Preview & monitor
 
-After clicking **Preview**, the output box shows the equivalent CLI command (4B example):
+After clicking **Preview command**, the output box shows the equivalent CLI command (4B example):
 
 ```
 llamafactory-cli train /path/to/llamaboard_cache/cmd_<timestamp>.yaml
